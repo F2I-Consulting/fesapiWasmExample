@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <title>Fesapi WebAssembly Workbench</title>
+    <style>
+      #entry, #prompt {
+        font-family: monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Fesapi WebAssembly Workbench</h1>
+    <h2 id="status">Loading JavaScript...</h2>
+    <div id="log">
+    </div>
+    <form id="form">
+      <label id="prompt" for="input">&gt;&nbsp;</label>
+      <input type="file" id="input" name="input" accept=".epc"
+             placeholder="Choose an epc file"
+             size="80"
+             multiple>
+    </form>    
+  </body>
+  <!-- <script type='text/javascript'>
+    let beginLoad = Date.now();    
+    let $ = document.getElementById.bind(document);
+
+    let addLog = (container, html) => {
+      let e = document.createElement(container);
+      e.innerHTML = html
+      document.getElementById("log").appendChild(e);
+    };
+    let defCount = 0;
+    let ignoredDefinitions = new Set();
+
+    var config = {
+      locateFile: () => './dist/fesapi.wasm.wasm'
+    }
+
+    var Fesapi = {
+      preRun() {
+        document.getElementById("status").innerHTML = "Initializing WebAssembly...";
+        for (let k in Fesapi) ignoredDefinitions.add(k);        
+      },
+      postRun() {
+        
+        document.getElementById("status").innerHTML = "Ready.";
+        document.getElementById("form").hidden = false;
+        for (let k in Fesapi)
+          if (!(k in window) && !ignoredDefinitions.has(k))
+            window[k] = Fesapi[k];
+        addLog('p', `Welcome to <a href="https://github.com/F2I-Consulting/fesapi/">Fesapi</a>.  Loading took ${Date.now() -
+    beginLoad}ms.`);        
+      },
+    };
+     
+    const UPLOADED_FILES = [];
+
+    function cF64Array(size) {
+      var offset = Fesapi._malloc(size * 8);
+      Fesapi.HEAPF64.set(new Float64Array(size), offset / 8);
+      return {
+          "data": Fesapi.HEAPF64.subarray(offset / 8, offset / 8 + size),
+          "offset": offset
+      }
+    }
+
+    function test_fesapi() {
+
+      //choose good file
+      let local_file = UPLOADED_FILES[0];
+      extension = local_file.substring(local_file.lastIndexOf('.') + 1);
+      if(extension !== "epc")
+      {
+        local_file = UPLOADED_FILES[1];
+      }
+      
+      addLog('p', local_file);
+      addLog('p', typeof Fesapi);
+      addLog('p', typeof Fesapi.DataObjectRepository);
+      let repo = new Fesapi.DataObjectRepository();
+      if(repo.getDefaultEmlVersion() == Fesapi.EnergisticsStandard.EML2_3) {
+        addLog('p', 'EML2_3');
+      }
+      else {
+        addLog('p', 'Other version');
+      }
+
+      let epc_doc = new Fesapi.EpcDocument(local_file); //file.name);
+      let res = epc_doc.deserializeInto(repo, Fesapi.openingMode.READ_ONLY);
+      addLog('p', res);
+      //epc_doc.close();
+      var uuids = repo.getUuids();
+      for (let i = 0; i < uuids.size(); i++)
+      {
+        addLog('p', uuids.get(i));
+      }          
+      for (let i = 0; i < repo.getFaultCount(); i++)
+      {
+        addLog('p', repo.getFault(i).getTitle());
+      }
+
+      var hdfProxyCount = repo.getHdfProxyCount();
+      addLog('p', 'There are ' + hdfProxyCount + ' hdf files associated to this epc document.');
+
+      for (let hdfProxyIndex = 0; hdfProxyIndex < hdfProxyCount; ++hdfProxyIndex) 
+      {
+        addLog('p', 'Hdf file relative path : ' + repo.getHdfProxy(hdfProxyIndex).getRelativePath());
+      }
+
+      for (let warningIndex = 0; warningIndex < repo.getWarnings().size(); ++warningIndex) 
+      {
+        addLog('p', 'Warning #' + warningIndex + ' : ' + repo.getWarnings().get(warningIndex));
+      }
+
+      for (let i = 0; i < repo.getFaultPolylineSetRepresentationCount(); i++)
+      {
+        var faultPolyRep = repo.getFaultPolylineSetRepresentation(i);
+        addLog('p', typeof faultPolyRep);
+        addLog('p', 'Fault PolylineSet name: ' + faultPolyRep.getTitle());
+        var nodeCount = faultPolyRep.getXyzPointCountOfAllPatches();
+        addLog('p', 'node Count: ' + nodeCount);
+        //var allXyzPoints = cF64Array(parseInt(nodeCount) * 3);        
+        //let allXyzPoints = new Float64Array(parseInt(nodeCount) * 3);
+        let allXyzPoints = new Fesapi.vectorDouble();
+        allXyzPoints.resize(parseInt(nodeCount) * 3, 1.);
+        faultPolyRep.getXyzPointsOfAllPatchesInGlobalCrs(allXyzPoints);
+        for (let i = 0; i < allXyzPoints.size(); ++i) 
+        {
+          addLog('p', 'value #' + i + ' : ' + allXyzPoints.get(i));
+        }
+
+        allXyzPoints.delete();
+      }
+
+
+    }
+
+    function copyFiles(file){
+      return new Promise(function(resolve, reject){
+        let reader = new FileReader();
+        let datafilename = file.name;
+
+        reader.onloadend = function(evt){
+          let data = evt.target.result;
+          //FS.writeFile(datafilename, new Uint8Array(data));
+                        
+            if (!UPLOADED_FILES.includes(datafilename)) {
+                UPLOADED_FILES.push(datafilename);
+                console.log("file loaded:", datafilename);
+            }
+            else {
+                console.log("file updated: ", datafilename)
+            }
+            resolve(reader.result);
+        };
+
+        reader.onerror = function(){
+            reject(reader);
+        };
+
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    function uploader() {
+      let files = this.files;
+      let readers = [];
+
+      // Abort if there were no files selected
+      if(!files.length) return;
+
+      // Store promises in array
+      for(let i = 0;i < files.length;i++){
+          readers.push(copyFiles(files[i]));
+      }
+      
+      // Trigger Promises
+      Promise.all(readers).then((values) => {
+          console.log(values);
+          test_fesapi();          
+      });
+    }
+
+
+    document.getElementById("input").onchange = uploader;    
+    
+
+  </script> -->
+
+  <!-- <script type="text/javascript" src="./fesapi.wasm.js"></script> -->
+  <script type="module" src="./main.js"></script>
+</html>
